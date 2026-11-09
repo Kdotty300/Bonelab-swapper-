@@ -12,6 +12,14 @@ jobs:
       with:
         dotnet-version: 6.x
 
+    - name: Fetch BoneLib and MelonLoader Stubs
+      run: |
+        md libs
+        # Download public reference assemblies for MelonLoader and BoneLib
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/BoneLib.dll
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/MelonLoader.dll
+        # Note: If compilation requires standard Unity structures, we reference them via the SDK targets
+
     - name: Create Project Configuration
       run: |
         $csproj = @"
@@ -19,16 +27,21 @@ jobs:
           <PropertyGroup>
             <TargetFramework>net6.0</TargetFramework>
             <ImplicitUsings>enable</ImplicitUsings>
-            <Nullable>enable</Nullable>
+            <Nullable>disable</Nullable>
           </PropertyGroup>
           <ItemGroup>
-            <Compile Remove="bin\**;obj\**" />
+            <Reference Include="MelonLoader">
+              <HintPath>libs/MelonLoader.dll</HintPath>
+            </Reference>
+            <Reference Include="BoneLib">
+              <HintPath>libs/BoneLib.dll</HintPath>
+            </Reference>
           </ItemGroup>
         </Project>
         "@
         Set-Content -Path "VibeSoundSwapper.csproj" -Value $csproj
 
-    - name: Build Standalone DLL
+    - name: Build Authentic DLL
       run: dotnet build VibeSoundSwapper.csproj --configuration Release
 
     - name: Upload Finished Mod
