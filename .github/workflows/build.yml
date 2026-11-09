@@ -12,28 +12,20 @@ jobs:
       with:
         dotnet-version: 6.x
 
-    - name: Auto-Generate Mod Glue Code
+    - name: Download Real BONELAB Reference Assemblies
       run: |
-        $glue = @"
-        using System;
-        namespace MelonLoader {
-            public class MelonMod {
-                public virtual void OnInitializeMelon() {}
-                public virtual void OnUpdate() {}
-            }
-            [AttributeUsage(AttributeTargets.Assembly)]
-            public class MelonInfoAttribute : Attribute {
-                public MelonInfoAttribute(Type t, string n, string v, string a) {}
-            }
-            [AttributeUsage(AttributeTargets.Assembly)]
-            public class MelonGameAttribute : Attribute {
-                public MelonGameAttribute(string d, string g) {}
-            }
-        }
-        "@
-        Set-Content -Path "MelonGlue.cs" -Value $glue
+        md libs
+        # Download real, functional MelonLoader and BoneLib developer reference files
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/MelonLoader.dll
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/BoneLib.dll
+        
+        # Download pure Unity core binaries so the compiler understands components natively
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/UnityEngine.dll
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/UnityEngine.CoreModule.dll
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/UnityEngine.AudioModule.dll
+        Invoke-WebRequest -Uri "https://github.com" -OutFile libs/UnityEngine.IMGUIModule.dll
 
-    - name: Create Base Project Configuration
+    - name: Create Real Project Configuration
       run: |
         $csproj = @"
         <Project Sdk="Microsoft.NET.Sdk">
@@ -42,14 +34,22 @@ jobs:
             <ImplicitUsings>enable</ImplicitUsings>
             <Nullable>disable</Nullable>
           </PropertyGroup>
+          <ItemGroup>
+            <Reference Include="MelonLoader"><HintPath>libs/MelonLoader.dll</HintPath></Reference>
+            <Reference Include="BoneLib"><HintPath>libs/BoneLib.dll</HintPath></Reference>
+            <Reference Include="UnityEngine"><HintPath>libs/UnityEngine.dll</HintPath></Reference>
+            <Reference Include="UnityEngine.CoreModule"><HintPath>libs/UnityEngine.CoreModule.dll</HintPath></Reference>
+            <Reference Include="UnityEngine.AudioModule"><HintPath>libs/UnityEngine.AudioModule.dll</HintPath></Reference>
+            <Reference Include="UnityEngine.IMGUIModule"><HintPath>libs/UnityEngine.IMGUIModule.dll</HintPath></Reference>
+          </ItemGroup>
         </Project>
         "@
         Set-Content -Path "VibeSoundSwapper.csproj" -Value $csproj
 
-    - name: Compile Library
+    - name: Build Authentic Working DLL
       run: dotnet build VibeSoundSwapper.csproj --configuration Release
 
-    - name: Upload Mod Artifact
+    - name: Upload Finished Mod
       uses: actions/upload-artifact@v4
       with:
         name: VibeSoundSwapper-DLL
