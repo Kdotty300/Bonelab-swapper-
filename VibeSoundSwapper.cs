@@ -1,25 +1,26 @@
 using System;
 using System.Reflection;
 
+[assembly: MelonLoader.MelonInfo(typeof(VibeSoundSwapper.Mod), "Vibe Sound Swapper", "1.0.0", "VibeCoder")]
+[assembly: MelonLoader.MelonGame("Stress Level Zero", "BONELAB")]
+
 namespace VibeSoundSwapper
 {
-    // A standard class library wrapper that MelonLoader can still bootstrap at runtime
-    public class Mod 
+    public class Mod : MelonLoader.MelonMod
     {
         private static object _copiedClip = null;
         private static bool _initialized = false;
         
-        // Reflection caches
         private static Type _inputManagerType;
         private static Type _playerType;
         private static MethodInfo _getKeyDownMethod;
         private static PropertyInfo _rightHandProp;
 
-        public static void Init()
+        public override void OnInitializeMelon()
         {
             try
             {
-                // Dynamically resolve game types from memory at runtime
+                // Resolve game types dynamically from memory at runtime
                 _inputManagerType = Type.GetType("BoneLib.InputManager, BoneLib");
                 _playerType = Type.GetType("BoneLib.Player, BoneLib");
 
@@ -33,17 +34,12 @@ namespace VibeSoundSwapper
             catch { }
         }
 
-        public void OnUpdate()
+        public override void OnUpdate()
         {
-            if (!_initialized)
-            {
-                Init();
-                return;
-            }
+            if (!_initialized) return;
 
             try
             {
-                // Check if right hand is active
                 var rightHand = _rightHandProp?.GetValue(null);
                 if (rightHand == null) return;
 
@@ -62,19 +58,16 @@ namespace VibeSoundSwapper
         {
             try
             {
-                // Navigate through BoneLib's physical hand components dynamically
                 var physicsHand = rightHand.GetType().GetProperty("physicsHand")?.GetValue(rightHand);
                 if (physicsHand == null) return;
 
                 var attachedObjects = (System.Collections.IList)physicsHand.GetType().GetField("attachedObjects")?.GetValue(physicsHand);
                 if (attachedObjects == null || attachedObjects.Count == 0) return;
 
-                // Extract the active weapon GameObject reference
                 var heldObj = attachedObjects[0];
                 var gameObject = (object)heldObj.GetType().GetProperty("gameObject")?.GetValue(heldObj);
                 if (gameObject == null) return;
 
-                // Hunt down any active AudioSource components inside the gun model
                 var getComponentMethod = gameObject.GetType().GetMethod("GetComponentInChildren", new Type[] { typeof(Type) });
                 Type audioSourceType = Type.GetType("UnityEngine.AudioSource, UnityEngine.AudioModule");
                 
@@ -94,7 +87,6 @@ namespace VibeSoundSwapper
                 }
                 else
                 {
-                    // Paste the stored audio component over the active weapon receiver
                     clipProperty?.SetValue(weaponAudio, _copiedClip);
                     _copiedClip = null;
                 }
