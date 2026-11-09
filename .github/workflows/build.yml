@@ -1,0 +1,22 @@
+name: Build Mod
+on: [push]
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: 6.x
+    - name: Download MelonLoader Core
+      run: |
+        Invoke-WebRequest -Uri "https://github.com" -OutFile melon.zip
+        Expand-Archive melon.zip -DestinationPath melon_libs
+    - name: Compile DLL
+      run: csc /target:library /out:VibeSoundSwapper.dll /reference:melon_libs/MelonLoader.dll,UnityEngine.CoreModule.dll,UnityEngine.AudioModule.dll VibeSoundSwapper.cs
+    - name: Upload Build
+      uses: actions/upload-artifact@v3
+      with:
+        name: VibeSoundSwapper-DLL
+        path: VibeSoundSwapper.dll
