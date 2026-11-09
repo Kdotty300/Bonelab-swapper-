@@ -1,92 +1,67 @@
 using System;
+using MelonLoader;
+using UnityEngine;
+using BoneLib;
 
-#nullable disable // Tells the compiler to stop complaining about null warnings
-
-namespace MelonLoader 
-{ 
-    public class MelonMod { public virtual void OnUpdate() {} }
-    public static class MelonLogger { public static void Msg(string txt) => Console.WriteLine(txt); }
-}
-
-namespace UnityEngine 
-{ 
-    public class MonoBehaviour {
-        public string name { get; set; } = "Object";
-    }
-    public class GameObject : MonoBehaviour {
-        public bool activeInHierarchy { get; set; } = true;
-        public Transform transform { get; set; } = new Transform();
-        public static GameObject Find(string name) => null;
-        public static AudioSource[] FindObjectsOfType<T>() => new AudioSource[0];
-    }
-    public class Transform { public GameObject root { get; set; } = new GameObject(); }
-    public class AudioClip { public string name { get; set; } = "SwappedSound"; }
-    public class AudioSource : MonoBehaviour { 
-        public AudioClip clip { get; set; } = new AudioClip(); 
-        public GameObject gameObject { get; set; } = new GameObject();
-        public Transform transform { get; set; } = new Transform();
-    }
-    public enum KeyCode { JoystickButton9 }
-    public static class Input { public static bool GetKeyDown(KeyCode k) => false; }
-}
+[assembly: MelonInfo(typeof(VibeSoundSwapper.Mod), "Vibe Sound Swapper", "1.0.0", "VibeCoder")]
+[assembly: MelonGame("Stress Level Zero", "BONELAB")]
 
 namespace VibeSoundSwapper
 {
-    public class Mod : MelonLoader.MelonMod
+    public class Mod : MelonMod
     {
-        private object _copiedClipRef = null;
+        private AudioClip _copiedClip = null;
 
         public override void OnUpdate()
         {
-            if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.JoystickButton9))
+            // Use BoneLib's safe input helper to detect the thumbstick click natively
+            if (Player.rightHand != null)
             {
-                ExecuteVibeSwap();
+                if (InputManager.GetKeyDown(InputManager.ControllerHand.Right, InputManager.ControllerKey.ThumbstickClick))
+                {
+                    ExecuteVibeSwap();
+                }
             }
         }
 
         private void ExecuteVibeSwap()
         {
-            var rigManager = UnityEngine.GameObject.Find("[RigManager]") ?? UnityEngine.GameObject.Find("Physics Rig");
-            
-            UnityEngine.AudioSource targetAudio = null;
-            var sources = UnityEngine.GameObject.FindObjectsOfType<UnityEngine.AudioSource>();
+            // Safely locate what object the player is holding via BoneLib
+            var physicalHand = Player.rightHand.physicsHand;
+            if (physicalHand == null || physicalHand.attachedObjects.Count == 0) return;
 
-            foreach (var src in sources)
+            GameObject heldRoot = physicalHand.attachedObjects[0].gameObject;
+            if (heldRoot == null) return;
+
+            // Search dynamically for an AudioSource component inside the held weapon
+            AudioSource weaponAudio = heldRoot.GetComponentInChildren<AudioSource>();
+            if (weaponAudio == null)
             {
-                if (src != null && src.gameObject.activeInHierarchy && src.name.ToLower().Contains("fire"))
-                {
-                    targetAudio = src;
-                    break;
-                }
+                MelonLogger.Msg("[VibeSwap] No AudioSource found on this custom weapon object.");
+                return;
             }
 
-            if (targetAudio == null && sources.Length > 0)
+            // State Machine logic to manage clipboard cloning
+            if (_copiedClip == null)
             {
-                foreach (var src in sources)
+                if (weaponAudio.clip != null)
                 {
-                    if (src != null && src.gameObject.activeInHierarchy && (src.transform.root.name.Contains("Spawned") || src.gameObject.name.Contains("Weapon")))
-                    {
-                        targetAudio = src;
-                        break;
-                    }
+                    _copiedClip = weaponAudio.clip;
+                    MelonLogger.Msg($"[VibeSwap] Successfully copied audio clip: {_copiedClip.name}");
                 }
-            }
-
-            if (targetAudio == null) return;
-
-            if (_copiedClipRef == null)
-            {
-                if (targetAudio.clip != null)
+                else
                 {
-                    _copiedClipRef = targetAudio.clip;
-                    MelonLoader.MelonLogger.Msg($"[VibeSwap] Copied sound from held weapon!");
+                    MelonLogger.Msg("[VibeSwap] Target AudioSource found, but its clip is empty.");
                 }
             }
             else
             {
-                targetAudio.clip = (UnityEngine.AudioClip)_copiedClipRef;
-                MelonLoader.MelonLogger.Msg($"[VibeSwap] Injected custom sound onto this weapon!");
-                _copiedClipRef = null;
+                // Inject the cached audio asset over the active weapon profile
+                weaponAudio.clip = _copiedClip;
+                MelonLogger.Msg("[VibeSwap] Successfully injected new gunshot sound!");
+                
+                // Clear the cache index so a new sound can be stored on the next action loop
+                _copiedClip = null;
             }
         }
     }
