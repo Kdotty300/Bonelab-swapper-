@@ -1,68 +1,105 @@
 using System;
-using MelonLoader;
-using UnityEngine;
-using BoneLib;
-
-[assembly: MelonInfo(typeof(VibeSoundSwapper.Mod), "Vibe Sound Swapper", "1.0.0", "VibeCoder")]
-[assembly: MelonGame("Stress Level Zero", "BONELAB")]
+using System.Reflection;
 
 namespace VibeSoundSwapper
 {
-    public class Mod : MelonMod
+    // A standard class library wrapper that MelonLoader can still bootstrap at runtime
+    public class Mod 
     {
-        private AudioClip _copiedClip = null;
+        private static object _copiedClip = null;
+        private static bool _initialized = false;
+        
+        // Reflection caches
+        private static Type _inputManagerType;
+        private static Type _playerType;
+        private static MethodInfo _getKeyDownMethod;
+        private static PropertyInfo _rightHandProp;
 
-        public override void OnUpdate()
+        public static void Init()
         {
-            // Use BoneLib's safe input helper to detect the thumbstick click natively
-            if (Player.rightHand != null)
+            try
             {
-                if (InputManager.GetKeyDown(InputManager.ControllerHand.Right, InputManager.ControllerKey.ThumbstickClick))
+                // Dynamically resolve game types from memory at runtime
+                _inputManagerType = Type.GetType("BoneLib.InputManager, BoneLib");
+                _playerType = Type.GetType("BoneLib.Player, BoneLib");
+
+                if (_inputManagerType != null && _playerType != null)
                 {
-                    ExecuteVibeSwap();
+                    _getKeyDownMethod = _inputManagerType.GetMethod("GetKeyDown", new Type[] { Type.GetType("BoneLib.InputManager+ControllerHand, BoneLib"), Type.GetType("BoneLib.InputManager+ControllerKey, BoneLib") });
+                    _rightHandProp = _playerType.GetProperty("rightHand", BindingFlags.Public | BindingFlags.Static);
+                    _initialized = true;
                 }
             }
+            catch { }
         }
 
-        private void ExecuteVibeSwap()
+        public void OnUpdate()
         {
-            // Safely locate what object the player is holding via BoneLib
-            var physicalHand = Player.rightHand.physicsHand;
-            if (physicalHand == null || physicalHand.attachedObjects.Count == 0) return;
-
-            GameObject heldRoot = physicalHand.attachedObjects[0].gameObject;
-            if (heldRoot == null) return;
-
-            // Search dynamically for an AudioSource component inside the held weapon
-            AudioSource weaponAudio = heldRoot.GetComponentInChildren<AudioSource>();
-            if (weaponAudio == null)
+            if (!_initialized)
             {
-                MelonLogger.Msg("[VibeSwap] No AudioSource found on this custom weapon object.");
+                Init();
                 return;
             }
 
-            // State Machine logic to manage clipboard cloning
-            if (_copiedClip == null)
+            try
             {
-                if (weaponAudio.clip != null)
+                // Check if right hand is active
+                var rightHand = _rightHandProp?.GetValue(null);
+                if (rightHand == null) return;
+
+                // Map enum values manually (Hand: Right = 1, Key: ThumbstickClick = 7)
+                bool stickClicked = (bool)_getKeyDownMethod.Invoke(null, new object[] { 1, 7 });
+
+                if (stickClicked)
                 {
-                    _copiedClip = weaponAudio.clip;
-                    MelonLogger.Msg($"[VibeSwap] Successfully copied audio clip: {_copiedClip.name}");
+                    ExecuteVibeSwap(rightHand);
+                }
+            }
+            catch { }
+        }
+
+        private static void ExecuteVibeSwap(object rightHand)
+        {
+            try
+            {
+                // Navigate through BoneLib's physical hand components dynamically
+                var physicsHand = rightHand.GetType().GetProperty("physicsHand")?.GetValue(rightHand);
+                if (physicsHand == null) return;
+
+                var attachedObjects = (System.Collections.IList)physicsHand.GetType().GetField("attachedObjects")?.GetValue(physicsHand);
+                if (attachedObjects == null || attachedObjects.Count == 0) return;
+
+                // Extract the active weapon GameObject reference
+                var heldObj = attachedObjects[0];
+                var gameObject = (object)heldObj.GetType().GetProperty("gameObject")?.GetValue(heldObj);
+                if (gameObject == null) return;
+
+                // Hunt down any active AudioSource components inside the gun model
+                var getComponentMethod = gameObject.GetType().GetMethod("GetComponentInChildren", new Type[] { typeof(Type) });
+                Type audioSourceType = Type.GetType("UnityEngine.AudioSource, UnityEngine.AudioModule");
+                
+                if (audioSourceType == null) return;
+                var weaponAudio = getComponentMethod.Invoke(gameObject, new object[] { audioSourceType });
+                if (weaponAudio == null) return;
+
+                var clipProperty = audioSourceType.GetProperty("clip");
+
+                if (_copiedClip == null)
+                {
+                    var activeClip = clipProperty?.GetValue(weaponAudio);
+                    if (activeClip != null)
+                    {
+                        _copiedClip = activeClip;
+                    }
                 }
                 else
                 {
-                    MelonLogger.Msg("[VibeSwap] Target AudioSource found, but its clip is empty.");
+                    // Paste the stored audio component over the active weapon receiver
+                    clipProperty?.SetValue(weaponAudio, _copiedClip);
+                    _copiedClip = null;
                 }
             }
-            else
-            {
-                // Inject the cached audio asset over the active weapon profile
-                weaponAudio.clip = _copiedClip;
-                MelonLogger.Msg("[VibeSwap] Successfully injected new gunshot sound!");
-                
-                // Clear the cache index so a new sound can be stored on the next action loop
-                _copiedClip = null;
-            }
+            catch { }
         }
     }
 }
