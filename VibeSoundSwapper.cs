@@ -1,5 +1,7 @@
 using System;
 
+#nullable disable // Tells the compiler to stop complaining about null warnings
+
 namespace MelonLoader 
 { 
     public class MelonMod { public virtual void OnUpdate() {} }
@@ -8,10 +10,11 @@ namespace MelonLoader
 
 namespace UnityEngine 
 { 
-    public class MonoBehaviour {}
+    public class MonoBehaviour {
+        public string name { get; set; } = "Object";
+    }
     public class GameObject : MonoBehaviour {
         public bool activeInHierarchy { get; set; } = true;
-        public string name { get; set; } = "";
         public Transform transform { get; set; } = new Transform();
         public static GameObject Find(string name) => null;
         public static AudioSource[] FindObjectsOfType<T>() => new AudioSource[0];
