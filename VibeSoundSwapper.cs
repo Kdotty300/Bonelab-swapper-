@@ -1,97 +1,94 @@
 using System;
-using System.Reflection;
+using MelonLoader;
+using UnityEngine;
+using BoneLib;
 
-[assembly: MelonLoader.MelonInfo(typeof(VibeSoundSwapper.Mod), "Vibe Sound Swapper", "1.0.0", "VibeCoder")]
-[assembly: MelonLoader.MelonGame("Stress Level Zero", "BONELAB")]
+[assembly: MelonInfo(typeof(VibeSoundSwapper.Mod), "Vibe Sound Swapper GUI", "1.2.0", "VibeCoder")]
+[assembly: MelonGame("Stress Level Zero", "BONELAB")]
 
 namespace VibeSoundSwapper
 {
-    public class Mod : MelonLoader.MelonMod
+    public class Mod : MelonMod
     {
-        private static object _copiedClip = null;
-        private static bool _initialized = false;
-        
-        private static Type _inputManagerType;
-        private static Type _playerType;
-        private static MethodInfo _getKeyDownMethod;
-        private static PropertyInfo _rightHandProp;
-
-        public override void OnInitializeMelon()
-        {
-            try
-            {
-                // Resolve game types dynamically from memory at runtime
-                _inputManagerType = Type.GetType("BoneLib.InputManager, BoneLib");
-                _playerType = Type.GetType("BoneLib.Player, BoneLib");
-
-                if (_inputManagerType != null && _playerType != null)
-                {
-                    _getKeyDownMethod = _inputManagerType.GetMethod("GetKeyDown", new Type[] { Type.GetType("BoneLib.InputManager+ControllerHand, BoneLib"), Type.GetType("BoneLib.InputManager+ControllerKey, BoneLib") });
-                    _rightHandProp = _playerType.GetProperty("rightHand", BindingFlags.Public | BindingFlags.Static);
-                    _initialized = true;
-                }
-            }
-            catch { }
-        }
+        private static AudioClip _copiedClip = null;
+        private static string _statusText = "Ready. Click Right Stick to Copy.";
 
         public override void OnUpdate()
         {
-            if (!_initialized) return;
-
-            try
+            // Safely verify Player and Hand data using real BoneLib hook properties
+            if (Player.rightHand != null)
             {
-                var rightHand = _rightHandProp?.GetValue(null);
-                if (rightHand == null) return;
-
-                // Map enum values manually (Hand: Right = 1, Key: ThumbstickClick = 7)
-                bool stickClicked = (bool)_getKeyDownMethod.Invoke(null, new object[] { 1, 7 });
-
-                if (stickClicked)
+                // Detect physical Right Stick Click down natively
+                if (InputManager.GetKeyDown(InputManager.ControllerHand.Right, InputManager.ControllerKey.ThumbstickClick))
                 {
-                    ExecuteVibeSwap(rightHand);
+                    ExecuteVibeSwap();
                 }
             }
-            catch { }
         }
 
-        private static void ExecuteVibeSwap(object rightHand)
+        public override void OnGUI()
+        {
+            // Draw a native Unity GUI overlay panel on your desktop monitor screen
+            GUILayout.BeginArea(new Rect(20, 20, 350, 120));
+            GUILayout.Box("<b>[VIBE SOUND SWAPPER]</b>");
+            GUILayout.Label("Status: " + _statusText);
+            
+            if (GUILayout.Button("Reset / Clear Clipboard"))
+            {
+                _copiedClip = null;
+                _statusText = "Clipboard cleared! Ready to copy.";
+            }
+            GUILayout.EndArea();
+        }
+
+        private static void ExecuteVibeSwap()
         {
             try
             {
-                var physicsHand = rightHand.GetType().GetProperty("physicsHand")?.GetValue(rightHand);
-                if (physicsHand == null) return;
+                var physicsHand = Player.rightHand.physicsHand;
+                if (physicsHand == null || physicsHand.attachedObjects.Count == 0)
+                {
+                    _statusText = "Error: You are not holding an object.";
+                    return;
+                }
 
-                var attachedObjects = (System.Collections.IList)physicsHand.GetType().GetField("attachedObjects")?.GetValue(physicsHand);
-                if (attachedObjects == null || attachedObjects.Count == 0) return;
+                // Get the physical GameObject of the held weapon
+                GameObject heldWeapon = physicsHand.attachedObjects[0].gameObject;
+                if (heldWeapon == null) return;
 
-                var heldObj = attachedObjects[0];
-                var gameObject = (object)heldObj.GetType().GetProperty("gameObject")?.GetValue(heldObj);
-                if (gameObject == null) return;
+                // Look for the gun's fire audio source component natively
+                AudioSource weaponAudio = heldWeapon.GetComponentInChildren<AudioSource>();
+                if (weaponAudio == null)
+                {
+                    _statusText = "No AudioSource found on this weapon model.";
+                    return;
+                }
 
-                var getComponentMethod = gameObject.GetType().GetMethod("GetComponentInChildren", new Type[] { typeof(Type) });
-                Type audioSourceType = Type.GetType("UnityEngine.AudioSource, UnityEngine.AudioModule");
-                
-                if (audioSourceType == null) return;
-                var weaponAudio = getComponentMethod.Invoke(gameObject, new object[] { audioSourceType });
-                if (weaponAudio == null) return;
-
-                var clipProperty = audioSourceType.GetProperty("clip");
-
+                // Copy vs Paste logic loop
                 if (_copiedClip == null)
                 {
-                    var activeClip = clipProperty?.GetValue(weaponAudio);
-                    if (activeClip != null)
+                    if (weaponAudio.clip != null)
                     {
-                        _copiedClip = activeClip;
+                        _copiedClip = weaponAudio.clip;
+                        _statusText = "Copied sound: " + _copiedClip.name;
+                    }
+                    else
+                    {
+                        _statusText = "Found audio player, but gun has no clip loaded.";
                     }
                 }
                 else
                 {
-                    clipProperty?.SetValue(weaponAudio, _copiedClip);
+                    // Hot-swap the active audio asset reference inside the game object memory
+                    weaponAudio.clip = _copiedClip;
+                    _statusText = "Injected custom sound! Clipboard reset.";
                     _copiedClip = null;
                 }
             }
-            catch { }
+            catch (Exception ex)
+            {
+                _statusText = "Error processing gun components.";
+            }
         }
     }
 }
