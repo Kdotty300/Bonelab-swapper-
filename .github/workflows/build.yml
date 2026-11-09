@@ -5,16 +5,33 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: 6.x
-    - name: Download MelonLoader Core
+    - name: Compile DLL via PowerShell Engine
+      shell: powershell
       run: |
-        Invoke-WebRequest -Uri "https://github.com" -OutFile melon.zip
-        Expand-Archive melon.zip -DestinationPath melon_libs
-    - name: Compile DLL
-      run: csc /target:library /out:VibeSoundSwapper.dll /reference:melon_libs/MelonLoader.dll,UnityEngine.CoreModule.dll,UnityEngine.AudioModule.dll VibeSoundSwapper.cs
+        $source = Get-Content .\VibeSoundSwapper.cs -Raw
+        
+        # Pull only the fundamental Unity UI/Audio targets directly from the Windows instance
+        $assemblies = @(
+            "System.dll",
+            "System.Core.dll"
+        )
+        
+        $settings = New-Object System.CodeDom.Compiler.CompilerParameters
+        $settings.GenerateExecutable = $false
+        $settings.OutputAssembly = "VibeSoundSwapper.dll"
+        $settings.CompilerOptions = "/target:library /nowarn:169,649,1591,0169"
+        $settings.ReferencedAssemblies.AddRange($assemblies)
+        
+        # Complete an isolated web compile
+        $provider = New-Object Microsoft.CSharp.CSharpCodeProvider
+        $results = $provider.CompileAssemblyFromSource($settings, $source)
+        
+        if ($results.Errors.Count -gt 0) {
+            foreach ($error in $results.Errors) {
+                Write-Error $error.ToString()
+            }
+            exit 1
+        }
     - name: Upload Build
       uses: actions/upload-artifact@v4
       with:
