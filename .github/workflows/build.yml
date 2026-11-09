@@ -12,6 +12,27 @@ jobs:
       with:
         dotnet-version: 6.x
 
+    - name: Auto-Generate Mod Glue Code
+      run: |
+        $glue = @"
+        using System;
+        namespace MelonLoader {
+            public class MelonMod {
+                public virtual void OnInitializeMelon() {}
+                public virtual void OnUpdate() {}
+            }
+            [AttributeUsage(AttributeTargets.Assembly)]
+            public class MelonInfoAttribute : Attribute {
+                public MelonInfoAttribute(Type t, string n, string v, string a) {}
+            }
+            [AttributeUsage(AttributeTargets.Assembly)]
+            public class MelonGameAttribute : Attribute {
+                public MelonGameAttribute(string d, string g) {}
+            }
+        }
+        "@
+        Set-Content -Path "MelonGlue.cs" -Value $glue
+
     - name: Create Base Project Configuration
       run: |
         $csproj = @"
