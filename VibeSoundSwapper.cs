@@ -1,13 +1,11 @@
 using System;
 
-// Dummy namespaces to satisfy the online compiler without needing external DLL dependencies
 namespace MelonLoader 
 { 
     public class MelonMod { public virtual void OnUpdate() {} }
-    [AttributeUsage(AttributeTargets.Assembly)] public class MelonInfoAttribute : Attribute { public MelonInfoAttribute(Type t, string n, string v, string a) {} }
-    [AttributeUsage(AttributeTargets.Assembly)] public class MelonGameAttribute : Attribute { public MelonGameAttribute(string d, string g) {} }
     public static class MelonLogger { public static void Msg(string txt) => Console.WriteLine(txt); }
 }
+
 namespace UnityEngine 
 { 
     public class MonoBehaviour {}
@@ -29,9 +27,6 @@ namespace UnityEngine
     public static class Input { public static bool GetKeyDown(KeyCode k) => false; }
 }
 
-[assembly: MelonLoader.MelonInfo(typeof(VibeSoundSwapper.Mod), "Vibe Sound Swapper", "1.0.0", "VibeCoder")]
-[assembly: MelonLoader.MelonGame("Stress Level Zero", "BONELAB")]
-
 namespace VibeSoundSwapper
 {
     public class Mod : MelonLoader.MelonMod
@@ -40,7 +35,6 @@ namespace VibeSoundSwapper
 
         public override void OnUpdate()
         {
-            // Unity legacy mapping for Right Stick Click
             if (UnityEngine.Input.GetKeyDown(UnityEngine.KeyCode.JoystickButton9))
             {
                 ExecuteVibeSwap();
@@ -49,10 +43,8 @@ namespace VibeSoundSwapper
 
         private void ExecuteVibeSwap()
         {
-            // 1. Locate rig objects
             var rigManager = UnityEngine.GameObject.Find("[RigManager]") ?? UnityEngine.GameObject.Find("Physics Rig");
             
-            // 2. Scan scene for the weapon audio sources
             UnityEngine.AudioSource targetAudio = null;
             var sources = UnityEngine.GameObject.FindObjectsOfType<UnityEngine.AudioSource>();
 
@@ -79,7 +71,6 @@ namespace VibeSoundSwapper
 
             if (targetAudio == null) return;
 
-            // 3. Clone and Paste Logic
             if (_copiedClipRef == null)
             {
                 if (targetAudio.clip != null)
